@@ -1,0 +1,5 @@
+node_modules/
+npm-debug.log
+local.settings.json
+infra/main.json
+.DS_Store
