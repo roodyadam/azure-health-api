@@ -25,3 +25,30 @@ For CI/CD I used GitHub Actions rather than Azure DevOps Pipelines. This matches
 ​```bash                    
 az group show --name rg-health-api-dev
 ​```                        
+If it doesn't exist yet, create it:
+```bash
+az group create --name rg-health-api-dev --location eastus
+```
+
+### 2. One-off setup: give the pipeline permission to deploy
+This only needs doing once per resource group. See "The bootstrapping problem" below for why, and for the exact commands.
+
+### 3. Deploy
+Push to `main`. The pipeline will:
+1. Install dependencies
+2. Log in to Azure via OIDC
+3. Deploy the infrastructure (Bicep)
+4. Deploy the function code
+
+### Deploying manually, without the pipeline
+```bash
+az deployment group create --resource-group rg-health-api-dev --template-file infra/main.bicep
+func azure functionapp publish <function-app-name>
+```
+
+### Running it locally
+```bash
+npm install
+func start
+curl http://localhost:7071/api/health
+```
