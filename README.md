@@ -1,4 +1,4 @@
-## Architecture
+## Architecture Diagram
 
 ![Architecture diagram](./Azure_Exercise.drawio.svg)
 
