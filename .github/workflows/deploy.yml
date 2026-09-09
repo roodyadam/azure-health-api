@@ -45,8 +45,9 @@ jobs:
 
       - name: Print live URL
         run: |
-          az deployment group show \
+          URL=$(az deployment group show \
             --resource-group rg-health-api-dev \
             --name main \
             --query properties.outputs.functionAppUrl.value \
-            --output tsv
+            --output tsv)
+          echo "Live URL: $URL/api/health" >> $GITHUB_STEP_SUMMARY
