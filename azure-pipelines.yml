@@ -1,0 +1,83 @@
+# Reference implementation only - not connected to a live Azure DevOps project.
+# Included to demonstrate the equivalent pipeline using Azure DevOps YAML Pipelines,
+# the brief's stated preference, alongside the GitHub Actions pipeline that is
+# actually deployed for this exercise.
+
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  resourceGroup: rg-health-api-dev
+  functionAppName: health-api-o4ezk57rap3g6
+
+stages:
+  - stage: Build
+    jobs:
+      - job: BuildApp
+        steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: '20.x'
+
+          - script: npm install
+            displayName: Install dependencies
+
+          - task: ArchiveFiles@2
+            inputs:
+              rootFolderOrFile: '$(System.DefaultWorkingDirectory)'
+              includeRootFolder: false
+              archiveType: zip
+              archiveFile: '$(Build.ArtifactStagingDirectory)/app.zip'
+
+          - publish: '$(Build.ArtifactStagingDirectory)/app.zip'
+            artifact: drop
+
+  - stage: DeployInfra
+    dependsOn: Build
+    jobs:
+      - job: DeployBicep
+        steps:
+          - task: AzureCLI@2
+            inputs:
+              azureSubscription: 'azure-health-api-service-connection'
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                az deployment group create \
+                  --resource-group $(resourceGroup) \
+                  --template-file infra/main.bicep
+
+  - stage: DeployApp
+    dependsOn: DeployInfra
+    jobs:
+      - job: DeployFunctionCode
+        steps:
+          - download: current
+            artifact: drop
+
+          - task: AzureFunctionApp@2
+            inputs:
+              azureSubscription: 'azure-health-api-service-connection'
+              appType: functionAppLinux
+              appName: '$(functionAppName)'
+              package: '$(Pipeline.Workspace)/drop/app.zip'
+
+          - task: AzureCLI@2
+            inputs:
+              azureSubscription: 'azure-health-api-service-connection'
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                URL=$(az deployment group show \
+                  --resource-group $(resourceGroup) \
+                  --name main \
+                  --query properties.outputs.functionAppUrl.value \
+                  --output tsv)
+                echo "Live URL: 
+                echo "Live URL: $URL/api/health"
+                
