@@ -33,7 +33,10 @@ az group create --name rg-health-api-dev --location eastus
 ```
 
 ### 2. One-off setup: give the pipeline permission to deploy
-This only needs doing once per resource group. See "The bootstrapping problem" below for why, and for the exact commands.
+
+This only needs doing once per resource group. It's the classic chicken and egg problem: GitHub Actions authenticates fine via OIDC, but without the right role assignment on the resource group, it still can't actually deploy anything.
+
+There are two ways round having to repeat this. One is to keep the resource group itself out of the teardown process entirely, so it's never deleted along with the rest of the infrastructure, since role assignments live at the resource group level and survive as long as it does. The other is adding a bootstrap step to the pipeline that creates the resource group before deploying main.bicep. Either way, something still needs permission to carry out that first step, so it can't fully remove the manual part, only move it.
 
 ### 3. Deploy
 Push to `main`. The pipeline will:
