@@ -21,14 +21,16 @@ For CI/CD I used GitHub Actions rather than Azure DevOps Pipelines. This matches
 - Node.js 20+
 
 ### 1. Check if the resource group exists
-​```bash
-az group show --name rg-health-api-dev
-​```
-If it doesn't exist yet, create it:
-​```bash
-az group create --name rg-health-api-dev --location eastus
-​```
 
+```bash
+az group show --name rg-health-api-dev
+```
+
+If it doesn't exist yet, create it:
+
+```bash
+az group create --name rg-health-api-dev --location eastus
+```
 
 ### 2. One-off setup: give the pipeline permission to deploy
 This only needs doing once per resource group. See "The bootstrapping problem" below for why, and for the exact commands.
