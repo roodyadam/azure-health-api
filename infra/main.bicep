@@ -1,113 +1,65 @@
 param location string = resourceGroup().location
+param appName string = 'health-api-${uniqueString(resourceGroup().id)}'
 
-resource storage 'Microsoft.Storage/storageAccounts@2023-01-01' = {
-  name: 'sthealthapi001'
-  location: location
-  sku: {
-    name: 'Standard_LRS'
-  }
-  kind: 'StorageV2'
-
-  resource blobServices 'blobServices' = {
-    name: 'default'
-    resource deploymentContainer 'containers' = {
-      name: 'app-package'
-      properties: {
-        publicAccess: 'None'
-      }
-    }
+module storageModule 'modules/storage.bicep' = {
+  name: 'storageDeployment'
+  params: {
+    location: location
   }
 }
 
-resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
-  name: 'health-api-insights'
-  location: location
-  kind: 'web'
-  properties: {
-    Application_Type: 'web'
+module insightsModule 'modules/insights.bicep' = {
+  name: 'insightsDeployment'
+  params: {
+    location: location
+    appName: appName
   }
 }
 
-resource hostingPlan 'Microsoft.Web/serverfarms@2023-01-01' = {
-  name: 'health-api-plan'
-  location: location
-  kind: 'linux'
-  sku: {
-    name: 'FC1'
-    tier: 'FlexConsumption'
-  }
-  properties: {
-    reserved: true
+module hostingPlanModule 'modules/hostingPlan.bicep' = {
+  name: 'hostingPlanDeployment'
+  params: {
+    location: location
+    appName: appName
   }
 }
 
-resource identity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
-  name: 'health-api-identity'
-  location: location
-}
-
-resource roleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(storage.id, identity.id, 'StorageBlobDataOwner')
-  scope: storage
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b')
-    principalId: identity.properties.principalId
-    principalType: 'ServicePrincipal'
+module identityModule 'modules/identity.bicep' = {
+  name: 'identityDeployment'
+  params: {
+    location: location
+    appName: appName
+    storageName: storageModule.outputs.storageName
   }
 }
 
-resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
-  name: 'health-api-${uniqueString(resourceGroup().id)}'
-  location: location
-  kind: 'functionapp,linux'
-  identity: {
-    type: 'UserAssigned'
-    userAssignedIdentities: {
-      '${identity.id}': {}
-    }
+module alertsModule 'modules/alerts.bicep' = {
+  name: 'alertsDeployment'
+  params: {
+    appName: appName
+    functionAppId: functionAppModule.outputs.functionAppId
   }
-  properties: {
-    serverFarmId: hostingPlan.id
-    siteConfig: {
-      appSettings: [
-        {
-          name: 'AzureWebJobsStorage'
-          value: 'DefaultEndpointsProtocol=https;AccountName=${storage.name};AccountKey=${storage.listKeys().keys[0].value};EndpointSuffix=core.windows.net'
-        }
-        {
-          name: 'APPINSIGHTS_INSTRUMENTATIONKEY'
-          value: appInsights.properties.InstrumentationKey
-        }
-        {
-          name: 'ENVIRONMENT'
-          value: 'dev'
-        }
-      ]
-    }
-    functionAppConfig: {
-      deployment: {
-        storage: {
-          type: 'blobContainer'
-          value: '${storage.properties.primaryEndpoints.blob}app-package'
-          authentication: {
-            type: 'UserAssignedIdentity'
-            userAssignedIdentityResourceId: identity.id
-          }
-        }
-      }
-      scaleAndConcurrency: {
-        maximumInstanceCount: 40
-        instanceMemoryMB: 512
-      }
-      runtime: {
-        name: 'node'
-        version: '24'
-      }
-    }
-  }
-  dependsOn: [
-    roleAssignment
-  ]
 }
 
-output functionAppUrl string = 'https://${functionApp.properties.defaultHostName}'
+module keyVaultModule 'modules/keyVault.bicep' = {
+  name: 'keyVaultDeployment'
+  params: {
+    location: location
+    identityPrincipalId: identityModule.outputs.identityPrincipalId
+    storageKey: storageModule.outputs.storageKey
+  }
+}
+
+module functionAppModule 'modules/functionApp.bicep' = {
+  name: 'functionAppDeployment'
+  params: {
+    location: location
+    hostingPlanId: hostingPlanModule.outputs.hostingPlanId
+    identityId: identityModule.outputs.identityId
+    storageName: storageModule.outputs.storageName
+    storagePrimaryBlobEndpoint: storageModule.outputs.storagePrimaryBlobEndpoint
+    instrumentationKey: insightsModule.outputs.instrumentationKey
+  }
+}
+
+output functionAppUrl string = functionAppModule.outputs.functionAppUrl

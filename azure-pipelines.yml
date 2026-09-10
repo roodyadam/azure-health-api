@@ -78,6 +78,4 @@ stages:
                   --name main \
                   --query properties.outputs.functionAppUrl.value \
                   --output tsv)
-                echo "Live URL: 
                 echo "Live URL: $URL/api/health"
-                

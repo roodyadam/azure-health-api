@@ -9,7 +9,9 @@ The task asked for a simple health-check API on Azure, using an Azure Function A
 
 The app itself is a single Node.js function that returns a health status. Nothing complicated there.
 
-For the infrastructure, I used one Bicep file that deploys everything. I originally planned to use the standard Consumption plan (Y1), but hit a quota limit of zero on the free trial subscription, so I switched to the newer Flex Consumption plan (FC1) instead. This plan needs the Function App to use a Managed Identity to read its own deployment files from storage, rather than a stored key, which happened to satisfy the optional Managed Identity requirement as a side effect.
+For the infrastructure, I split the deployment into reusable Bicep modules — storage, Application Insights, hosting plan, managed identity, Key Vault, alerts, and the Function App itself — composed from a single `main.bicep`. I originally planned to use the standard Consumption plan (Y1), but hit a quota limit of zero on the free trial subscription, so I switched to the newer Flex Consumption plan (FC1) instead. This plan needs the Function App to use a Managed Identity to read its own deployment files from storage, rather than a stored key, which happened to satisfy the optional Managed Identity requirement as a side effect.
+
+I also added a Key Vault as one of the optional stretch goals. It stores the storage account key as a secret, with RBAC-only access (no legacy access policies) granted solely to the Function App's managed identity. The app doesn't actually read this secret at runtime — its storage connection is already fully identity-based and needs no key at all, which is the stronger pattern. The vault instead sits alongside it as a defense-in-depth measure: the key exists somewhere secured behind the same identity boundary rather than nowhere at all, in case anything ever legitimately needs it. Wiring the app to actually resolve the key through a Key Vault reference is possible and is listed below under improvements, but I didn't do it by default since it would mean introducing a stored credential the app doesn't currently need.
 
 For CI/CD I used GitHub Actions rather than Azure DevOps Pipelines. This matches my existing experience running similar pipelines against AWS, using the same secure login method (OIDC) with no stored passwords or secrets. I've also included a reference Azure DevOps pipeline (azure-pipelines.yml) for comparison, though it isn't connected to a live project. 
 
@@ -62,12 +64,18 @@ curl http://localhost:7071/api/health
 
 - I deployed to `eastus` rather than `uksouth`, because the free trial subscription had a Y1 quota of zero in every UK/EU region I tried.
 - I used FC1 instead of the classic Y1 Consumption plan, for the same reason.
-- I didn't set up VNet integration or private networking, since the brief didn't ask for it and a public endpoint is fine for a health-check demo.
-- I kept everything to one flat `dev` environment, with no separate staging or production setup.
-- The deployment package uses Managed Identity for storage access, since FC1 requires it. I left the runtime storage connection on a key, though.
-- I used Node 20 for the Function App runtime. Node 24 is the current recommended LTS, so I'd update this if I were taking it further.
-- I went with `Standard_LRS` for the storage account, the cheapest replication tier, which is fine for a dev workload but not something I'd choose for anything holding real data.
-- I noticed the storage account defaults to a minimum TLS version of 1.0. I'd raise this to 1.2 for anything beyond a demo.
+- The deployment package and the runtime storage connection both use Managed Identity rather than a key, since FC1 requires identity-based access for deployment and I extended the same approach to the runtime connection rather than mixing patterns.
 - I scoped the pipeline's identity to Contributor and User Access Administrator on the resource group only, not the subscription, to keep the blast radius small.
 - I set the `/api/health` endpoint to anonymous auth rather than a function key, since it's a public health check with nothing sensitive in it.
 - I made the repository public, following the brief's stated preference.
+
+## What I'd Improve With More Time
+
+- Wire the Function App's storage connection to actually resolve the key via a Key Vault reference (`@Microsoft.KeyVault(SecretUri=...)`), so the Key Vault integration is exercised end-to-end rather than just holding a secret in reserve. Worth doing to demonstrate the full pattern, even though the current identity-based connection is arguably the more secure default.
+- Separate staging and production environments, parameterized through Bicep and pipeline stages, instead of the one flat `dev` environment I have now.
+- Add VNet integration and private networking instead of a public endpoint. Reasonable to skip for a demo health check, not for anything handling real traffic.
+- Raise the storage account's minimum TLS version from its default of 1.0 to 1.2.
+- Move off `Standard_LRS` to a redundancy tier appropriate for real data — it's fine for a dev workload but not something I'd choose otherwise.
+- Upgrade the Function App runtime from Node 20 to Node 24, the current LTS.
+- Give the metric alert an action group — right now it fires but notifies no one — and add a couple more alerts, such as HTTP error rate.
+- Add automated tests: unit tests for the function itself, and a post-deploy smoke test in the pipeline that hits `/api/health` and checks the response.
