@@ -3,7 +3,7 @@
 ![Architecture diagram](./Azure_Exercise.drawio.svg)
 
 
-Design
+## Design
 
 The task asked for a simple health-check API on Azure, using an Azure Function App, a Storage Account and Application Insights, deployed with Bicep and no manual steps in the portal, delivered through a pipeline.
 
@@ -11,9 +11,11 @@ The app itself is a single Node.js function that returns a health status. Nothin
 
 For the infrastructure, I split the deployment into reusable Bicep modules — storage, Application Insights, hosting plan, managed identity, Key Vault, alerts, and the Function App itself — composed from a single `main.bicep`. I originally planned to use the standard Consumption plan (Y1), but hit a quota limit of zero on the free trial subscription, so I switched to the newer Flex Consumption plan (FC1) instead. This plan needs the Function App to use a Managed Identity to read its own deployment files from storage, rather than a stored key, which happened to satisfy the optional Managed Identity requirement as a side effect.
 
-I also added a Key Vault as one of the optional stretch goals. It stores the storage account key as a secret, with RBAC-only access (no legacy access policies) granted solely to the Function App's managed identity. The app doesn't actually read this secret at runtime — its storage connection is already fully identity-based and needs no key at all, which is the stronger pattern. The vault instead sits alongside it as a defense-in-depth measure: the key exists somewhere secured behind the same identity boundary rather than nowhere at all, in case anything ever legitimately needs it. Wiring the app to actually resolve the key through a Key Vault reference is possible and is listed below under improvements, but I didn't do it by default since it would mean introducing a stored credential the app doesn't currently need.
+I also added a Key Vault and a metric alert as two more of the optional stretch goals. The Key Vault stores the storage account key as a secret, with RBAC-only access granted solely to the Function App's managed identity. The app doesn't actually read this secret at runtime, since its storage connection is already fully identity-based and needs no key at all, which is the stronger pattern, so the vault sits alongside it as a defense-in-depth measure rather than something actively used. The alert watches the Function App's execution count and fires if it goes silent for 15 minutes; Flex Consumption doesn't expose an HTTP error-rate metric the way classic App Service does, so this catches total silence rather than active failures, and it currently has no action group wired up, so it fires without notifying anyone yet. Both of these gaps are listed below under improvements.
 
-For CI/CD I used GitHub Actions rather than Azure DevOps Pipelines. This matches my existing experience running similar pipelines against AWS, using the same secure login method (OIDC) with no stored passwords or secrets. I've also included a reference Azure DevOps pipeline (azure-pipelines.yml) for comparison, though it isn't connected to a live project. 
+For CI/CD I used GitHub Actions rather than Azure DevOps Pipelines. This matches my existing experience running similar pipelines against AWS, using the same secure login method (OIDC) with no stored passwords or secrets. I've also included a reference Azure DevOps pipeline (azure-pipelines.yml) for comparison, though it isn't connected to a live project.
+
+The trickiest problem I ran into wasn't in the initial build, it showed up when I tore down individual resources for testing while deliberately keeping the resource group itself intact, to avoid having to redo the pipeline's permissions setup. My role assignment for the storage identity used a deterministic name, generated from the storage account and identity's resource IDs. That's normally good practice, it makes redeploys idempotent, but it meant that when I deleted and recreated the storage account and identity, the old role assignment stuck around as an orphan under that same name, and the new deployment collided with it. I tracked it down by comparing role assignment lists before and after, removed the orphaned one manually, then fixed the underlying cause by including a deployment timestamp in the naming formula, so each deployment now generates a fresh, unique name instead of risking a collision again.
 
 ## How to deploy          
 
@@ -62,20 +64,26 @@ curl http://localhost:7071/api/health
 
 ## Assumptions
 
+## Assumptions
+
 - I deployed to `eastus` rather than `uksouth`, because the free trial subscription had a Y1 quota of zero in every UK/EU region I tried.
 - I used FC1 instead of the classic Y1 Consumption plan, for the same reason.
-- The deployment package and the runtime storage connection both use Managed Identity rather than a key, since FC1 requires identity-based access for deployment and I extended the same approach to the runtime connection rather than mixing patterns.
+- The deployment package and the runtime storage connection both use Managed Identity rather than a key, since FC1 requires identity-based access for deployment and I extended the same approach to the runtime connection.
+- The Key Vault holds a copy of the storage key as a defense-in-depth measure, but the app doesn't read from it, since the storage connection doesn't need a key at all.
+- The metric alert has no action group attached, so it fires without notifying anyone yet.
 - I scoped the pipeline's identity to Contributor and User Access Administrator on the resource group only, not the subscription, to keep the blast radius small.
 - I set the `/api/health` endpoint to anonymous auth rather than a function key, since it's a public health check with nothing sensitive in it.
 - I made the repository public, following the brief's stated preference.
 
 ## What I'd Improve With More Time
 
-- Wire the Function App's storage connection to actually resolve the key via a Key Vault reference (`@Microsoft.KeyVault(SecretUri=...)`), so the Key Vault integration is exercised end-to-end rather than just holding a secret in reserve. Worth doing to demonstrate the full pattern, even though the current identity-based connection is arguably the more secure default.
+- Wire the Function App's storage connection to actually resolve the key via a Key Vault reference, so the vault is exercised end-to-end rather than just holding a secret in reserve.
+- Add an action group to the metric alert so it actually notifies someone, and add a couple more alerts, such as HTTP error rate.
 - Separate staging and production environments, parameterized through Bicep and pipeline stages, instead of the one flat `dev` environment I have now.
-- Add VNet integration and private networking instead of a public endpoint. Reasonable to skip for a demo health check, not for anything handling real traffic.
+- Add VNet integration and private networking instead of a public endpoint.
 - Raise the storage account's minimum TLS version from its default of 1.0 to 1.2.
-- Move off `Standard_LRS` to a redundancy tier appropriate for real data — it's fine for a dev workload but not something I'd choose otherwise.
+- Move off `Standard_LRS` to a redundancy tier appropriate for real data.
 - Upgrade the Function App runtime from Node 20 to Node 24, the current LTS.
-- Give the metric alert an action group — right now it fires but notifies no one — and add a couple more alerts, such as HTTP error rate.
-- Add automated tests: unit tests for the function itself, and a post-deploy smoke test in the pipeline that hits `/api/health` and checks the responses.
+- Add automated tests: a unit test for the function itself, and a post-deploy smoke test in the pipeline that hits `/api/health` and checks the response.
+- Automate the pipeline's own bootstrap step, or at least document it as a clearer setup script rather than manual CLI commands.
+- Connect the Azure DevOps pipeline to a real project rather than leaving it as a reference file.
