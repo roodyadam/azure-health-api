@@ -29,7 +29,7 @@ module identityModule 'modules/identity.bicep' = {
   params: {
     location: location
     appName: appName
-    storageName: storageModule.outputs.storageName
+    storageId: storageModule.outputs.storageId
   }
 }
 
