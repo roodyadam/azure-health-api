@@ -87,3 +87,4 @@ curl http://localhost:7071/api/health
 - Add automated tests: a unit test for the function itself, and a post-deploy smoke test in the pipeline that hits `/api/health` and checks the response.
 - Automate the pipeline's own bootstrap step, or at least document it as a clearer setup script rather than manual CLI commands.
 - Connect the Azure DevOps pipeline to a real project rather than leaving it as a reference file.
+- Handle Key Vault's soft-delete behaviour explicitly in any teardown process; deleting the vault without also purging it would block a fresh vault of the same name being recreated.
