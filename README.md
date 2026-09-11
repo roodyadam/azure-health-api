@@ -78,4 +78,4 @@ curl http://localhost:7071/api/health
 - Move off `Standard_LRS` to a redundancy tier appropriate for real data — it's fine for a dev workload but not something I'd choose otherwise.
 - Upgrade the Function App runtime from Node 20 to Node 24, the current LTS.
 - Give the metric alert an action group — right now it fires but notifies no one — and add a couple more alerts, such as HTTP error rate.
-- Add automated tests: unit tests for the function itself, and a post-deploy smoke test in the pipeline that hits `/api/health` and checks the response.
+- Add automated tests: unit tests for the function itself, and a post-deploy smoke test in the pipeline that hits `/api/health` and checks the responses.
