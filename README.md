@@ -5,8 +5,6 @@
 
 ## Design
 
-## Design
-
 The task asked for a simple health-check API on Azure, using an Azure Function App, a Storage Account and Application Insights, deployed with Bicep and no manual steps in the portal, delivered through a pipeline.
 
 The app itself is a single Node.js function that returns a health status. Nothing complicated there.
