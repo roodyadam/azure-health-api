@@ -5,6 +5,8 @@
 
 ## Design
 
+## Design
+
 The task asked for a simple health-check API on Azure, using an Azure Function App, a Storage Account and Application Insights, deployed with Bicep and no manual steps in the portal, delivered through a pipeline.
 
 The app itself is a single Node.js function that returns a health status. Nothing complicated there.
@@ -14,8 +16,6 @@ For the infrastructure, I split the deployment into reusable Bicep modules — s
 I also added a Key Vault and a metric alert as two more of the optional stretch goals. The Key Vault stores the storage account key as a secret, with RBAC-only access granted solely to the Function App's managed identity. The app doesn't actually read this secret at runtime, since its storage connection is already fully identity-based and needs no key at all, which is the stronger pattern, so the vault sits alongside it as a defense-in-depth measure rather than something actively used. The alert watches the Function App's execution count and fires if it goes silent for 15 minutes; Flex Consumption doesn't expose an HTTP error-rate metric the way classic App Service does, so this catches total silence rather than active failures, and it currently has no action group wired up, so it fires without notifying anyone yet. Both of these gaps are listed below under improvements.
 
 For CI/CD I used GitHub Actions rather than Azure DevOps Pipelines. This matches my existing experience running similar pipelines against AWS, using the same secure login method (OIDC) with no stored passwords or secrets. I've also included a reference Azure DevOps pipeline (azure-pipelines.yml) for comparison, though it isn't connected to a live project.
-
-The trickiest problem I ran into wasn't in the initial build, it showed up when I tore down individual resources for testing while deliberately keeping the resource group itself intact, to avoid having to redo the pipeline's permissions setup. My role assignment for the storage identity used a deterministic name, generated from the storage account and identity's resource IDs. That's normally good practice, it makes redeploys idempotent, but it meant that when I deleted and recreated the storage account and identity, the old role assignment stuck around as an orphan under that same name, and the new deployment collided with it. I tracked it down by comparing role assignment lists before and after, removed the orphaned one manually, then fixed the underlying cause by including a deployment timestamp in the naming formula, so each deployment now generates a fresh, unique name instead of risking a collision again.
 
 ## How to deploy          
 
@@ -64,8 +64,6 @@ curl http://localhost:7071/api/health
 
 ## Assumptions
 
-## Assumptions
-
 - I deployed to `eastus` rather than `uksouth`, because the free trial subscription had a Y1 quota of zero in every UK/EU region I tried.
 - I used FC1 instead of the classic Y1 Consumption plan, for the same reason.
 - The deployment package and the runtime storage connection both use Managed Identity rather than a key, since FC1 requires identity-based access for deployment and I extended the same approach to the runtime connection.
@@ -91,6 +89,6 @@ curl http://localhost:7071/api/health
 
 ## Trade-offs
 
-- **Deterministic vs unique role assignment naming.** My storage role assignment was originally named deterministically, from the storage account and identity's resource IDs. That's correct for normal redeploys, since Azure recognises the same assignment already exists and does nothing, but it meant that when I deleted the storage account and identity individually while keeping the resource group intact, the old assignment stuck around as an orphan and blocked recreation under the same name. I tried fixing this by making the name unique per deployment using a timestamp, but that broke the far more common case: a normal redeploy where nothing had changed then tried to create a second, functionally duplicate role assignment, which Azure also blocks, just with a different error. I reverted to deterministic naming, since it's correct for day-to-day use, and left the teardown-collision scenario as a known limitation instead, documented below.
+- **Deterministic vs unique role assignment naming.** My storage role assignment was originally named deterministically, from the storage account and identity's resource IDs. That's correct for normal redeploys, since Azure recognises the same assignment already exists and does nothing, but it meant that when I deleted the storage account and identity individually while keeping the resource group intact, the old assignment stuck around as an orphan and blocked recreation under the same name. I tried fixing this by making the name unique per deployment using a timestamp, but that broke the far more common case: a normal redeploy where nothing had changed then tried to create a second, functionally duplicate role assignment, which Azure also blocks, just with a different error. I reverted to deterministic naming, since it's correct for day-to-day use, and left the teardown-collision scenario as a known limitation instead, documented above.
 - **Key Vault holding a key the app doesn't use.** The Function App's storage connection is fully identity-based and needs no key at all, so the Key Vault secret isn't read at runtime. I kept it anyway as a defense-in-depth measure rather than removing it, on the basis that having the key available somewhere secured is safer than not having it stored anywhere, even if nothing currently depends on it.
 - **FC1 over Y1.** Not a preference, a workaround for a quota limit of zero on the free trial subscription. Y1 would have kept the Function App resource simpler, without needing a Managed Identity or the blob-based deployment storage FC1 requires.
