@@ -84,6 +84,7 @@ curl http://localhost:7071/api/health
 - Automate the pipeline's own bootstrap step, or at least document it as a clearer setup script rather than manual CLI commands.
 - Connect the Azure DevOps pipeline to a real project rather than leaving it as a reference file.
 - Handle Key Vault's soft-delete behaviour explicitly in any teardown process; deleting the vault without also purging it would block a fresh vault of the same name being recreated.
+- the pipeline is tightly coupled to one specific Function App name. If I changed the environment or resource naming, I'd have to manually update the pipeline. I'd improve this by passing the Function App name as a parameter or taking it from a Bicep deployment output, so the infrastructure and pipeline stay consistent
 
 ## Trade-offs
 

@@ -1,7 +1,4 @@
-# Reference implementation only - not connected to a live Azure DevOps project.
-# Included to demonstrate the equivalent pipeline using Azure DevOps YAML Pipelines,
-# the brief's stated preference, alongside the GitHub Actions pipeline that is
-# actually deployed for this exercise.
+# Reference implementation only 
 
 trigger:
   branches:
