@@ -69,7 +69,6 @@ curl http://localhost:7071/api/health
 - The metric alert has no action group attached, so it fires without notifying anyone yet.
 - I scoped the pipeline's identity to Contributor and User Access Administrator on the resource group only, not the subscription, to keep the blast radius small.
 - I set the `/api/health` endpoint to anonymous auth rather than a function key, since it's a public health check with nothing sensitive in it.
-- I made the repository public, following the brief's stated preference.
 
 ## What I'd Improve With More Time
 
